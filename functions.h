@@ -1,3 +1,4 @@
+
 static inline double square(double v){
 	return v*v;
 }
@@ -33,43 +34,6 @@ static inline void sub_vector(double* a, double* b, double* answer){
     answer[0] = a[0] - b[0];
     answer[1] = a[1] - b[1];
     answer[2] = a[2] - b[2];
-}
-static inline int compare_objects(scene_object listo, scene_object pointero){
-    if(listo.type != pointero.type) return -1;
-    if(listo.diffuse_color[0] != pointero.diffuse_color[0] || listo.diffuse_color[1] != pointero.diffuse_color[1] || listo.diffuse_color[2] != pointero.diffuse_color[2]) return -1;
-    if(listo.specular_color[0] != pointero.specular_color[0] || listo.specular_color[1] != pointero.specular_color[1] || listo.specular_color[2] != pointero.specular_color[2]) return -1;
-    if(listo.position[0] != pointero.position[0] || listo.position[1] != pointero.position[1] || listo.position[2] != pointero.position[2]) return -1;
-    if(listo.type == 'p'){
-        if(listo.normal[0] != pointero.normal[0] || listo.normal[1] != pointero.normal[1] || listo.normal[2] != pointero.normal[2]) return -1;
-    }
-    if(listo.type == 's'){
-        if(listo.radius != pointero.radius) return -1;
-    }
-    return 0;
-}
-static inline scene_object copy_object(scene_object coppy, scene_object original){
-    //printf("orig type: %c\n", original.type);
-    coppy.type = original.type;
-    //printf("coppy type: %c\n", coppy.type);
-    coppy.diffuse_color[0] = original.diffuse_color[0];
-    coppy.diffuse_color[1] = original.diffuse_color[1];
-    coppy.diffuse_color[2] = original.diffuse_color[2];
-
-    coppy.specular_color[0] = original.specular_color[0];
-    coppy.specular_color[1] = original.specular_color[1];
-    coppy.specular_color[2] = original.specular_color[2];
-
-    coppy.position[0] = original.position[0];
-    coppy.position[1] = original.position[1];
-    coppy.position[2] = original.position[1];
-
-    if(original.type == 'p'){
-        coppy.normal[0] = original.normal[0];
-        coppy.normal[1] = original.normal[1];
-        coppy.normal[2] = original.normal[2];
-    }
-    if(original.type == 's') coppy.radius = original.radius;
-    return coppy;
 }
 static inline double clamp(double c){
     if(c>1)
@@ -125,8 +89,6 @@ static inline double f_ang(scene_light a, double* Rd_new, double PI){
 
 static inline double f_rad(scene_light a, double* Ro_new){
     double* vector_to_light = malloc(sizeof(double)*3);
-    double answer;
-
     //a.position - Ro_new = vector_to_light
     sub_vector(a.position, Ro_new, vector_to_light);
     //scale_vector(-1, vector_to_light, vector_to_light);

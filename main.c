@@ -1,10 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
+#include <ctype.h>
 #include "structs.h"
 #include "functions.h"
-#include <math.h>
-void illuminate(double color[], int closest_object_index, double Ro[], double Rd[], double best_t);
+
+double* illuminate(int recursion_depth, double* color, int closest_object_index, double Ro[], double Rd[], double best_t);
+double shoot_double(double* Ro, double* Rd);
+int shoot_int(double* Ro, double* Rd);
 
 int line = 1;
 int num_camera;
@@ -202,7 +206,6 @@ void read_scene(char* filename) {
       }
     skip_ws(json);
     int cam_vars = 0;
-	int obj_vars = 0;
     while (1) {
 	// , }
 
@@ -264,8 +267,13 @@ void read_scene(char* filename) {
                         fprintf(stderr, "Reflectivity value is out of the range, 0.0-1.0\n");
                         exit(1);
                     }
+
                     obj_list[list_i].reflectivity = value;
                     //obj_vars +=1;
+                    if(1 - obj_list[list_i].reflectivity - obj_list[list_i].refractivity < 0){
+                        fprintf(stderr, "1 - reflectivity - refractivity is below 0.\n");
+                        exit(1);
+                    }
                 }
                 if((strcmp(key, "refractivity") == 0)){
                     if(value < 0 || value > 1){
@@ -273,6 +281,10 @@ void read_scene(char* filename) {
                     exit(1);
                     }
                     obj_list[list_i].refractivity = value;
+                    if(1 - obj_list[list_i].reflectivity - obj_list[list_i].refractivity < 0){
+                        fprintf(stderr, "1 - reflectivity - refractivity is below 0.\n");
+                        exit(1);
+                    }
                     //obj_vars +=1;
                 }
                 if((strcmp(key, "ior") == 0)){
@@ -457,7 +469,7 @@ void raycast(double num_width, double num_height){
 
     int x = 0;
     int y = 0;
-    int i,j,k;
+    int i;
 
     //Where the camera is sitting
     double Ro[3] = {0.0, 0.0, 0.0};
@@ -472,7 +484,6 @@ void raycast(double num_width, double num_height){
 
     //Center of the view plane
     double center[2] = {0.0, 0.0};
-
 
     //c_xyz is center of the view plane
 
@@ -491,11 +502,6 @@ void raycast(double num_width, double num_height){
 
             double best_t = INFINITY;
             int closest_object_index = -1;
-            double best_c[3] = {0,0,0};
-
-
-            scene_object closest_object;
-            closest_object.type = NULL;
             for(i=0; i<=list_i; i++){
                 //printf("i is: %d", i);
                 double t = 0;
@@ -509,48 +515,50 @@ void raycast(double num_width, double num_height){
                 //printf("Before copy the obj_list[j].type is: %c\n", obj_list[i].type);
                 if(t > 0 && t < best_t){
                     best_t = t;
-
-                    //best_c = obj_list[i].color;
-                    best_c[0] = obj_list[i].diffuse_color[0];
-                    best_c[1] = obj_list[i].diffuse_color[1];
-                    best_c[2] = obj_list[i].diffuse_color[2];
-
-                    closest_object = copy_object(closest_object, obj_list[i]);
                     closest_object_index = i;
 
                     //printf("Closest_object.type: %c\n", closest_object.type);
                 }
             }
+            //printf("best_t is: %g.\n", best_t);
 //After you loop through all the objects, I should have the closest object to the pixel I am looking at
             double color[3] = {0,0,0};
 
             color[0] = 0;
             color[1] = 0;
             color[2] = 0;
+
+            double final_color[3] = {0,0,0};
             //If best_t is greater than 0 and not INFINITY, intersection is in view of camera
             if(best_t > 0 && best_t != INFINITY){
                 //Painting Fucntion that illuminates the current pixel based upon the lights in the scene.
-                illuminate(color,closest_object_index,Ro,Rd, best_t);
+                memcpy(final_color,illuminate(3, color,closest_object_index,Ro,Rd, best_t), sizeof(double)*3);
                 }
                 int pos = (int)((M - y -1)*N +x);
-                pixel_buffer[pos].r = (unsigned char)(clamp(color[0])*255);
-                pixel_buffer[pos].g = (unsigned char)(clamp(color[1])*255);
-                pixel_buffer[pos].b = (unsigned char)(clamp(color[2])*255);
+                pixel_buffer[pos].r = (unsigned char)(clamp(final_color[0])*255);
+                pixel_buffer[pos].g = (unsigned char)(clamp(final_color[1])*255);
+                pixel_buffer[pos].b = (unsigned char)(clamp(final_color[2])*255);
         }
     }
 }
 
-void illuminate(double color[], int closest_object_index, double Ro[], double Rd[], double best_t){
-    int j,k;
+double* illuminate(int recursion_depth, double* color, int closest_object_index, double Ro[], double Rd[], double best_t){
+    //base case
+    if(recursion_depth == 0 || best_t == INFINITY || closest_object_index < 0){
+        double black[3] = {0,0,0};
+        return black;
+    }
+
     double Ro_new[3] = {0,0,0}; //Ro_new is vector from Light towards Object.  Current Pixel location of intersection.
     Ro_new[0] = (best_t * Rd[0]) + Ro[0];
     Ro_new[1] = (best_t * Rd[1]) + Ro[1];
     Ro_new[2] = (best_t * Rd[2]) + Ro[2];
+
+    int j,k;
     for(j=0; j<=list_l; j++){ //Do Summation of Ambient + Diffuse + Emission Light
 
         //printf("Ro_new[0] is: %lf\n", Ro_new[0]);
         double Rd_new[3] = {0,0,0}; //Ray direction from object intersection position to Light position
-        //sub_vector(Ro_new, light_list[j].position,  Rd_new); //Turn on For RINGS
         sub_vector(light_list[j].position, Ro_new, Rd_new);
         normalize(Rd_new);
         //printf("Ro_new is: %lf, %lf, %lf.\n", light_list[j].position[0], light_list[j].position[1], light_list[j].position[2]);
@@ -627,28 +635,102 @@ void illuminate(double color[], int closest_object_index, double Ro[], double Rd
             double N_dot_L = dot_product(closest_normal, vector_direction_to_light);
 
 
-            color[0] += f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
+            //Setting values for reflection vector
+            double rec_Ro[3] = {0,0,0};
+            memcpy(rec_Ro,Ro_new, sizeof(double)*3);
+            double rec_Rd[3] = {0,0,0};
+            memcpy(rec_Rd,Rd_new, sizeof(double)*3);
+            //vector_reflect(closest_normal, Rd_new, rec_Rd);
+            //scale_vector(-1, rec_Rd, rec_Rd);
+            double rec_best_t;
+            rec_best_t = shoot_double(rec_Ro,rec_Rd);
+            int rec_co_index = shoot_int(rec_Ro,rec_Rd);
+
+            //printf("rec_best_t: %g, rec_co_index: %d.\n", rec_best_t, rec_co_index);
+
+
+            color[0] += (1 - obj_list[closest_object_index].reflectivity - obj_list[closest_object_index].refractivity) *
+                         f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
                             (diffuse_contribution(0,current_diffuse,light_list[j],N_dot_L)
                              +
                             specular_contribution(0,current_specular,light_list[j],N_dot_L,V_dot_R,ns)
-                             );
+                             ) +
+                        //Reflectivity Color
+                        (obj_list[closest_object_index].reflectivity) * illuminate(recursion_depth-1,color, rec_co_index, rec_Ro, rec_Rd, rec_best_t)[0] +
+                        //Refractivity Color
+                        (obj_list[closest_object_index].refractivity) * 0
+                        ;
 
-            color[1] += f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
+            color[1] += (1 - obj_list[closest_object_index].reflectivity - obj_list[closest_object_index].refractivity) *
+                            f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
                             (diffuse_contribution(1,current_diffuse,light_list[j],N_dot_L)
                              +
                             specular_contribution(1,current_specular,light_list[j],N_dot_L,V_dot_R,ns)
-                             );
+                             ) +
+                        //Reflectivity Color
+                        (obj_list[closest_object_index].reflectivity) * illuminate(recursion_depth-1,color, rec_co_index, rec_Ro, rec_Rd, rec_best_t)[0] +
+                        //Refractivity Color
+                        (obj_list[closest_object_index].refractivity) * 0
+                        ;
 
-            color[2] += f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
+            color[2] += (1 - obj_list[closest_object_index].reflectivity - obj_list[closest_object_index].refractivity) *
+                            f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
                             (diffuse_contribution(2,current_diffuse,light_list[j],N_dot_L)
                              +
                             specular_contribution(2,current_specular,light_list[j],N_dot_L,V_dot_R,ns)
-                             );
+                             ) +
+                        //Reflectivity Color
+                        (obj_list[closest_object_index].reflectivity) * illuminate(recursion_depth-1,color, rec_co_index, rec_Ro, rec_Rd, rec_best_t)[0] +
+                        //Refractivity Color
+                        (obj_list[closest_object_index].refractivity) * 0
+                        ;
 
         }//Not darkening shadows, just lighting up where there are no shadows
     }
+    return color;
 }
 
+double shoot_double(double* Ro, double* Rd){
+    normalize(Rd);
+    double best_t = INFINITY;
+    int closest_object_index = -1;
+    int i;
+    for(i=0; i<=list_i; i++){
+        double t = 0;
+        if(obj_list[i].type == 's'){
+                t = sphere_intersection(Ro, Rd, obj_list[i].position, obj_list[i].radius);
+        }
+        if(obj_list[i].type == 'p'){
+                t = plane_intersection(Ro, Rd, obj_list[i].position, obj_list[i].normal);
+        }
+        if(t > 0 && t < best_t){
+            best_t = t;
+            closest_object_index = i;
+        }
+    }
+    return best_t;
+}
+int shoot_int(double* Ro, double* Rd){
+    normalize(Rd);
+    double best_t = INFINITY;
+    int closest_object_index = -1;
+    int i;
+    for(i=0; i<=list_i; i++){
+        double t = 0;
+        if(obj_list[i].type == 's'){
+                t = sphere_intersection(Ro, Rd, obj_list[i].position, obj_list[i].radius);
+        }
+        if(obj_list[i].type == 'p'){
+                t = plane_intersection(Ro, Rd, obj_list[i].position, obj_list[i].normal);
+        }
+        if(t > 0 && t < best_t){
+            best_t = t;
+            closest_object_index = i;
+
+        }
+    }
+    return closest_object_index;
+}
 
 int write(int w, int h, char *output_image){
     FILE *fp;
