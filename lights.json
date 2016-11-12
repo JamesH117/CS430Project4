@@ -1,25 +1,44 @@
 [
 {
 "type": "camera",
-"width": 2.0,
-"height": 2.0
+"width": 3.0,
+"height": 3.0
 },
 {
 "type": "sphere",
 "radius": 2.0,
-"reflectivity": .4,
-"refractivity": .3,
+"reflectivity": .2,
+"refractivity": 0,
 "ior": 1.33,
 "diffuse_color": [1, 0, 0],
 "specular_color": [1, 1, 1],
 "position": [0, 1, 5]
 },
 {
+"type": "sphere",
+"radius": 1,
+"reflectivity": 0,
+"refractivity": 0,
+"ior": 1.33,
+"diffuse_color": [1, 1, 0],
+"specular_color": [1, 1, 1],
+"position": [0, 1, 5]
+},
+{
 "type": "plane",
 "normal": [0, 1, 0],
+"reflectivity": .7,
 "diffuse_color": [0, 1, 1],
 "specular_color": [1, 1, 1],
 "position": [0, -1, 0]
+},
+{
+"type": "plane",
+"normal": [1, 0, 0],
+"reflectivity": .8,
+"diffuse_color": [.3, 1, 0],
+"specular_color": [1, 1, 1],
+"position": [-2.5, 0, 0]
 },
 {
 "type": "light",
