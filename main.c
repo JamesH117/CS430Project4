@@ -6,7 +6,7 @@
 #include "structs.h"
 #include "functions.h"
 
-double* illuminate(int recursion_depth, double* color, int closest_object_index, double Ro[], double Rd[], double best_t);
+double* illuminate(int recursion_depth, double* color, int closest_object_index, double Ro[], double Rd[], double best_t, double initial_ior);
 double shoot_double(double* Ro, double* Rd);
 int shoot_int(double* Ro, double* Rd);
 
@@ -15,7 +15,9 @@ int num_camera;
 int total_objects;
 int list_i = 0;
 int list_l = 0;
+double black[3] = {0,0,0};
 #define PI 3.141592653589793
+
 obj_camera main_camera;
 scene_object *obj_list;
 scene_light *light_list;
@@ -532,23 +534,21 @@ void raycast(double num_width, double num_height){
             //If best_t is greater than 0 and not INFINITY, intersection is in view of camera
             if(best_t > 0 && best_t != INFINITY){
                 //Painting Fucntion that illuminates the current pixel based upon the lights in the scene.
-                memcpy(final_color,illuminate(3, color,closest_object_index,Ro,Rd, best_t), sizeof(double)*3);
-                }
-                int pos = (int)((M - y -1)*N +x);
-                pixel_buffer[pos].r = (unsigned char)(clamp(final_color[0])*255);
-                pixel_buffer[pos].g = (unsigned char)(clamp(final_color[1])*255);
-                pixel_buffer[pos].b = (unsigned char)(clamp(final_color[2])*255);
+                memcpy(final_color,illuminate(7, color,closest_object_index,Ro,Rd, best_t, 1), sizeof(double)*3);
+            }
+            int pos = (int)((M - y -1)*N +x);
+            pixel_buffer[pos].r = (unsigned char)(clamp(final_color[0])*255);
+            pixel_buffer[pos].g = (unsigned char)(clamp(final_color[1])*255);
+            pixel_buffer[pos].b = (unsigned char)(clamp(final_color[2])*255);
         }
     }
 }
 
-double* illuminate(int recursion_depth, double* color, int closest_object_index, double Ro[], double Rd[], double best_t){
+double* illuminate(int recursion_depth, double* color, int closest_object_index, double Ro[], double Rd[], double best_t, double initial_ior){
     //base case
-    if(recursion_depth == 0 || best_t == INFINITY || closest_object_index < 0){
-        double black[3] = {0,0,0};
+    if(recursion_depth == 0 || closest_object_index < 0 || best_t == INFINITY || best_t == -1*INFINITY || best_t == 0*INFINITY){
         return black;
     }
-
     double Ro_new[3] = {0,0,0}; //Ro_new is vector from Light towards Object.  Current Pixel location of intersection.
     Ro_new[0] = (best_t * Rd[0]) + Ro[0];
     Ro_new[1] = (best_t * Rd[1]) + Ro[1];
@@ -569,7 +569,6 @@ double* illuminate(int recursion_depth, double* color, int closest_object_index,
         int closest_shadow_index = -1;
         for(k=0; k<=list_i; k++){  //Iterate through objects to see what casts a shadow on pixel
             double t_shadow = 0;
-            //if(compare_objects(obj_list[k], closest_object) == 0) continue;
             if(k == closest_object_index) continue;
 
             if(obj_list[k].type == 's'){
@@ -578,17 +577,12 @@ double* illuminate(int recursion_depth, double* color, int closest_object_index,
             if(obj_list[k].type == 'p'){
                     t_shadow = plane_intersection(Ro_new, Rd_new, obj_list[k].position, obj_list[k].normal);
             }
-            //if(best_t > square(vector_length(object_to_light))){
-            //if(best_t > vector_length(object_to_light)){
             if(best_t > distance_light_to_pixel){ //Need to skip if object is past light
-                //printf("best_t: %g.\n", best_t);
-                //printf("distance from light to pixel: %g.\n", distance_light_to_pixel);
                 continue;
             }
             if(t_shadow > 0.0 && t_shadow < best_t_shadow){
                 best_t_shadow = t_shadow;
                 closest_shadow_index = k;
-                //printf("Closest_shadow_object.type: %c\n", closest_shadow_object.type);
             }
         }
         //if(closest_shadow_object.type == NULL){ //Color in the lighting for that pixel because there is no object casting a shadow on the closest object.
@@ -596,9 +590,7 @@ double* illuminate(int recursion_depth, double* color, int closest_object_index,
         if(closest_shadow_index < 0){
             double closest_normal[3] = {0,0,0};
             if(obj_list[closest_object_index].type == 's') {
-                    sub_vector(Ro_new, obj_list[closest_object_index].position, closest_normal); //Turn on for RINGS
-                    //sub_vector(closest_object.position, Ro_new, closest_normal);
-
+                    sub_vector(Ro_new, obj_list[closest_object_index].position, closest_normal);
                     }
             if(obj_list[closest_object_index].type == 'p'){
                 closest_normal[0] = obj_list[closest_object_index].normal[0];
@@ -607,8 +599,6 @@ double* illuminate(int recursion_depth, double* color, int closest_object_index,
             }
 
             normalize(closest_normal);
-            //scale_vector(-1, closest_normal, closest_normal);
-
             double *vector_direction_to_light = Rd_new;  //vector from object intersection to Light position
             double reflection_of_light_vector[3] = {0,0,0};
 
@@ -619,9 +609,9 @@ double* illuminate(int recursion_depth, double* color, int closest_object_index,
             normalize(reflection_of_light_vector);
 
             double view_vector[3] = {0,0,0};
-            view_vector[0] = 1*Rd[0];
-            view_vector[1] = 1*Rd[1];
-            view_vector[2] = 1*Rd[2];
+            view_vector[0] = Rd[0];
+            view_vector[1] = Rd[1];
+            view_vector[2] = Rd[2];
             normalize(view_vector);
 
             double* current_diffuse = obj_list[closest_object_index].diffuse_color;
@@ -635,56 +625,80 @@ double* illuminate(int recursion_depth, double* color, int closest_object_index,
             double N_dot_L = dot_product(closest_normal, vector_direction_to_light);
 
 
-            //Setting values for reflection vector
             double rec_Ro[3] = {0,0,0};
             memcpy(rec_Ro,Ro_new, sizeof(double)*3);
+
+            //Start of Reflection Values:
             double rec_Rd[3] = {0,0,0};
-            memcpy(rec_Rd,Rd_new, sizeof(double)*3);
-            //vector_reflect(closest_normal, Rd_new, rec_Rd);
-            //scale_vector(-1, rec_Rd, rec_Rd);
-            double rec_best_t;
-            rec_best_t = shoot_double(rec_Ro,rec_Rd);
+            double c1;
+            c1 = dot_product(closest_normal, Rd);
+            c1 = -1*c1;
+            scale_vector(c1, closest_normal, rec_Rd);
+            scale_vector(2, rec_Rd, rec_Rd);
+            add_vector(Rd, rec_Rd, rec_Rd);
+            normalize(rec_Rd);
+            double rec_best_t = shoot_double(rec_Ro,rec_Rd);
             int rec_co_index = shoot_int(rec_Ro,rec_Rd);
+            //END of reflection values
 
-            //printf("rec_best_t: %g, rec_co_index: %d.\n", rec_best_t, rec_co_index);
 
 
-            color[0] += (1 - obj_list[closest_object_index].reflectivity - obj_list[closest_object_index].refractivity) *
-                         f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
-                            (diffuse_contribution(0,current_diffuse,light_list[j],N_dot_L)
-                             +
-                            specular_contribution(0,current_specular,light_list[j],N_dot_L,V_dot_R,ns)
-                             ) +
-                        //Reflectivity Color
-                        (obj_list[closest_object_index].reflectivity) * illuminate(recursion_depth-1,color, rec_co_index, rec_Ro, rec_Rd, rec_best_t)[0] +
-                        //Refractivity Color
-                        (obj_list[closest_object_index].refractivity) * 0
-                        ;
+            //START of refract values
+            double original_IOR = initial_ior;
+            double new_IOR = obj_list[closest_object_index].index_of_refraction;
+            double ior = original_IOR/new_IOR;
 
-            color[1] += (1 - obj_list[closest_object_index].reflectivity - obj_list[closest_object_index].refractivity) *
-                            f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
-                            (diffuse_contribution(1,current_diffuse,light_list[j],N_dot_L)
-                             +
-                            specular_contribution(1,current_specular,light_list[j],N_dot_L,V_dot_R,ns)
-                             ) +
-                        //Reflectivity Color
-                        (obj_list[closest_object_index].reflectivity) * illuminate(recursion_depth-1,color, rec_co_index, rec_Ro, rec_Rd, rec_best_t)[0] +
-                        //Refractivity Color
-                        (obj_list[closest_object_index].refractivity) * 0
-                        ;
+            double c2 = sqrt(1 - square(ior) * (1 - square(c1)));
+            double rec_Rrd[3] = {0,0,0};
+            double temp[3] = {0,0,0};
+            scale_vector(ior, Rd, temp);
+            scale_vector((ior*c1-c2), closest_normal, rec_Rrd);
+            add_vector(temp,rec_Rrd,rec_Rrd);
+            normalize(rec_Rrd);
+            double rrec_best_t = shoot_double(rec_Ro,rec_Rrd);
+            int rrec_co_index = shoot_int(rec_Ro,rec_Rrd);
+            //END of refract values
 
-            color[2] += (1 - obj_list[closest_object_index].reflectivity - obj_list[closest_object_index].refractivity) *
-                            f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
-                            (diffuse_contribution(2,current_diffuse,light_list[j],N_dot_L)
-                             +
-                            specular_contribution(2,current_specular,light_list[j],N_dot_L,V_dot_R,ns)
-                             ) +
-                        //Reflectivity Color
-                        (obj_list[closest_object_index].reflectivity) * illuminate(recursion_depth-1,color, rec_co_index, rec_Ro, rec_Rd, rec_best_t)[0] +
-                        //Refractivity Color
-                        (obj_list[closest_object_index].refractivity) * 0
-                        ;
+            //No refraction or reflection
+            if(obj_list[closest_object_index].reflectivity == 0){
+                    color[0] += (1 - obj_list[closest_object_index].reflectivity - obj_list[closest_object_index].refractivity) *
+                                    f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
+                                    (diffuse_contribution(0,current_diffuse,light_list[j],N_dot_L) + specular_contribution(0,current_specular,light_list[j],N_dot_L,V_dot_R,ns));
 
+                    color[1] += (1 - obj_list[closest_object_index].reflectivity - obj_list[closest_object_index].refractivity) *
+                                    f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
+                                    (diffuse_contribution(1,current_diffuse,light_list[j],N_dot_L)+specular_contribution(1,current_specular,light_list[j],N_dot_L,V_dot_R,ns));
+
+                    color[2] += (1 - obj_list[closest_object_index].reflectivity - obj_list[closest_object_index].refractivity) *
+                                    f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
+                                    (diffuse_contribution(2,current_diffuse,light_list[j],N_dot_L)+specular_contribution(2,current_specular,light_list[j],N_dot_L,V_dot_R,ns));
+            }
+            //Just reflections
+            if(obj_list[closest_object_index].reflectivity != 0){
+                    color[0] += (1 - obj_list[closest_object_index].reflectivity - obj_list[closest_object_index].refractivity) *
+                                    f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
+                                    (diffuse_contribution(0,current_diffuse,light_list[j],N_dot_L) + specular_contribution(0,current_specular,light_list[j],N_dot_L,V_dot_R,ns)) +
+                                //Reflectivity Color
+                                ((obj_list[closest_object_index].reflectivity) * illuminate(recursion_depth-1, color, rec_co_index, rec_Ro, rec_Rd, rec_best_t,ior)[0]) +
+                                //Refractivity Color
+                                (obj_list[closest_object_index].refractivity) * 0;
+
+                    color[1] += (1 - obj_list[closest_object_index].reflectivity - obj_list[closest_object_index].refractivity) *
+                                    f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
+                                    (diffuse_contribution(1,current_diffuse,light_list[j],N_dot_L)+specular_contribution(1,current_specular,light_list[j],N_dot_L,V_dot_R,ns)) +
+                                //Reflectivity Color
+                                ((obj_list[closest_object_index].reflectivity) * illuminate(recursion_depth-1, color, rec_co_index, rec_Ro, rec_Rd, rec_best_t,ior)[1]) +
+                                //Refractivity Color
+                                (obj_list[closest_object_index].refractivity) * 0;
+
+                    color[2] += (1 - obj_list[closest_object_index].reflectivity - obj_list[closest_object_index].refractivity) *
+                                    f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
+                                    (diffuse_contribution(2,current_diffuse,light_list[j],N_dot_L)+specular_contribution(2,current_specular,light_list[j],N_dot_L,V_dot_R,ns)) +
+                                //Reflectivity Color
+                                ((obj_list[closest_object_index].reflectivity) * illuminate(recursion_depth-1, color, rec_co_index, rec_Ro, rec_Rd, rec_best_t,ior)[2]) +
+                                //Refractivity Color
+                                (obj_list[closest_object_index].refractivity) * 0;
+            }
         }//Not darkening shadows, just lighting up where there are no shadows
     }
     return color;
@@ -693,7 +707,7 @@ double* illuminate(int recursion_depth, double* color, int closest_object_index,
 double shoot_double(double* Ro, double* Rd){
     normalize(Rd);
     double best_t = INFINITY;
-    int closest_object_index = -1;
+    //int closest_object_index = -1;
     int i;
     for(i=0; i<=list_i; i++){
         double t = 0;
@@ -705,7 +719,7 @@ double shoot_double(double* Ro, double* Rd){
         }
         if(t > 0 && t < best_t){
             best_t = t;
-            closest_object_index = i;
+            //closest_object_index = i;
         }
     }
     return best_t;
@@ -726,7 +740,6 @@ int shoot_int(double* Ro, double* Rd){
         if(t > 0 && t < best_t){
             best_t = t;
             closest_object_index = i;
-
         }
     }
     return closest_object_index;
