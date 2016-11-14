@@ -269,13 +269,15 @@ void read_scene(char* filename) {
                         fprintf(stderr, "Reflectivity value is out of the range, 0.0-1.0\n");
                         exit(1);
                     }
-
                     obj_list[list_i].reflectivity = value;
-                    //obj_vars +=1;
-                    if(1.0 - obj_list[list_i].reflectivity - obj_list[list_i].refractivity < 0){
+                    if(1.0 - obj_list[list_i].reflectivity - obj_list[list_i].refractivity < -0.01){
                         fprintf(stderr, "1 - reflectivity - refractivity is below 0.\n");
                         exit(1);
                     }
+                    if(1.0 - obj_list[list_i].reflectivity - obj_list[list_i].refractivity < 0){
+                        value -= 0.01;
+                    }
+                    obj_list[list_i].reflectivity = value;
                 }
                 //HELP If these add up to exactly 1, it still errors out.
                 if((strcmp(key, "refractivity") == 0)){
@@ -284,11 +286,14 @@ void read_scene(char* filename) {
                     exit(1);
                     }
                     obj_list[list_i].refractivity = value;
-                    if(1.0 - obj_list[list_i].reflectivity - obj_list[list_i].refractivity < 0){
+                    if(1.0 - obj_list[list_i].reflectivity - obj_list[list_i].refractivity < -0.01){
                         fprintf(stderr, "1 - reflectivity - refractivity is below 0.\n");
                         exit(1);
                     }
-                    //obj_vars +=1;
+                    if(1.0 - obj_list[list_i].reflectivity - obj_list[list_i].refractivity < 0){
+                        value -= 0.01;
+                    }
+                    obj_list[list_i].refractivity = value;
                 }
                 if((strcmp(key, "ior") == 0)){
                     obj_list[list_i].index_of_refraction = value;
@@ -626,10 +631,12 @@ double* illuminate(int recursion_depth, double* color, int closest_object_index,
             double N_dot_L = dot_product(closest_normal, vector_direction_to_light);
 
 
+
+
+            //Start of Reflection Values:
             double rec_Ro[3] = {0,0,0};
             memcpy(rec_Ro,Ro_new, sizeof(double)*3);
 
-            //Start of Reflection Values:
             double rec_Rd[3] = {0,0,0};
             double c1;
             c1 = dot_product(closest_normal, Rd);
@@ -639,6 +646,10 @@ double* illuminate(int recursion_depth, double* color, int closest_object_index,
             add_vector(Rd, rec_Rd, rec_Rd);
             normalize(rec_Rd);
 
+            rec_Ro[0] = Ro_new[0] + rec_Rd[0]*0.01;
+            rec_Ro[1] = Ro_new[1] + rec_Rd[1]*0.01;
+            rec_Ro[2] = Ro_new[2] + rec_Rd[2]*0.01;
+
             double rec_best_t = shoot_double(rec_Ro,rec_Rd);
             int rec_co_index = shoot_int(rec_Ro,rec_Rd);
             //END of reflection values
@@ -646,6 +657,9 @@ double* illuminate(int recursion_depth, double* color, int closest_object_index,
 
 
             //START of refract values
+            double rec_Rro[3] = {0,0,0};
+            memcpy(rec_Ro,Ro_new, sizeof(double)*3);
+
             double original_IOR = initial_ior;
             double new_IOR = obj_list[closest_object_index].index_of_refraction;
             double ior = original_IOR/new_IOR;
@@ -659,6 +673,10 @@ double* illuminate(int recursion_depth, double* color, int closest_object_index,
             scale_vector(-1, rec_Rrd, rec_Rrd);
             normalize(rec_Rrd);
 
+            rec_Rro[0] = Ro_new[0] + rec_Rrd[0]*0.01;
+            rec_Rro[1] = Ro_new[1] + rec_Rrd[1]*0.01;
+            rec_Rro[2] = Ro_new[2] + rec_Rrd[2]*0.01;
+
             double rrec_best_t = shoot_double(rec_Ro,rec_Rrd);
             int rrec_co_index = shoot_int(rec_Ro,rec_Rrd);
             //END of refract values
@@ -670,7 +688,7 @@ double* illuminate(int recursion_depth, double* color, int closest_object_index,
                 illuminate(recursion_depth-1, reflection_color, rec_co_index, rec_Ro, rec_Rd, rec_best_t,ior);
             }
             if(obj_list[closest_object_index].refractivity != 0){
-                illuminate(recursion_depth-1, refraction_color, rrec_co_index, rec_Ro, rec_Rrd, rrec_best_t,ior);
+                illuminate(recursion_depth-1, refraction_color, rrec_co_index, rec_Rro, rec_Rrd, rrec_best_t,ior);
             }
             color[0] += (1 - obj_list[closest_object_index].reflectivity - obj_list[closest_object_index].refractivity) *
                             f_rad(light_list[j], Ro_new) * f_ang(light_list[j],Rd_new,PI) *
