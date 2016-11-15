@@ -677,8 +677,8 @@ double* illuminate(int recursion_depth, double* color, int closest_object_index,
             rec_Rro[1] = Ro_new[1] + rec_Rrd[1]*0.01;
             rec_Rro[2] = Ro_new[2] + rec_Rrd[2]*0.01;
 
-            double rrec_best_t = shoot_double(rec_Ro,rec_Rrd);
-            int rrec_co_index = shoot_int(rec_Ro,rec_Rrd);
+            double rrec_best_t = shoot_double(rec_Rro,rec_Rrd);
+            int rrec_co_index = shoot_int(rec_Rro,rec_Rrd);
             //END of refract values
 
             double reflection_color[3] = {0,0,0};
